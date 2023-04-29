@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+    <Appenders>
+        <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="console"/>
+        </Root>
+        <Logger name="org.apache.spark" level="warn" additivity="false">
+            <AppenderRef ref="console"/>
+        </Logger>
+        <Logger name="org.sparkproject" level="warn" additivity="false">
+            <AppenderRef ref="console"/>
+        </Logger>
+        <!-- Your hostname, xxx resolves to a loopback address: 127.0.1.1; using xxx.xxx.xxx.xxx instead (on interface wlp3s0) -->
+        <Logger name="org.apache.spark.util.Utils" level="error" additivity="false">
+            <AppenderRef ref="console"/>
+        </Logger>
+        <!-- Unable to load native-hadoop library for your platform... using builtin-java classes where applicable -->
+        <Logger name="org.apache.hadoop.util.NativeCodeLoader" level="error" additivity="false">
+            <AppenderRef ref="console"/>
+        </Logger>
+    </Loggers>
+</Configuration>
