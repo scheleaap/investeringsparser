@@ -2,9 +2,9 @@ package job
 
 import com.github.dwickern.macros.NameOf.nameOf
 import com.monovore.decline.Opts
-import job.MoneyUtil.{MoneyType, parseCurrencyValue}
+import job.MoneyUtil.{parseCurrencyValue, MoneyType}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Dataset, SparkSession}
 import util.{CommandApp2, Spark}
 
 object Main
@@ -20,12 +20,15 @@ object Main
   }
 
   def main(spark: SparkSession)(csvPath: String): Unit = {
+    import spark.implicits._
     val df = readInputFile(spark)(csvPath)
+      .transform(addAndFilterByProject(spark))
+      .groupBy($"project.name")
+      .agg(sum("bankStatementItem.amountValue"))
     df.show()
-    println(df.schema)
   }
 
-  private def readInputFile(spark: SparkSession)(path: String): DataFrame = {
+  private def readInputFile(spark: SparkSession)(path: String): Dataset[BankStatementItem] = {
     import spark.implicits._
     spark.read
       .format("csv")
@@ -44,6 +47,32 @@ object Main
         parseCurrencyValue($"Betrag").cast(MoneyType).as("amountValue"),
         $"W�hrung8".as("amountCurrency")
       )
-    // TODO: Convert to case class
+      .as[BankStatementItem]
+  }
+
+  private def addAndFilterByProject(spark: SparkSession)(input: Dataset[BankStatementItem]): Dataset[(BankStatementItemWithProject)] = {
+    import spark.implicits._
+
+    input.flatMap(i =>
+      reasonForTransferToProject(i.senderOrReceiver, i.reasonForTransfer)
+        .map(j => BankStatementItemWithProject(i, j))
+    )
+  }
+
+  private def reasonForTransferToProject(senderOrReceiver: String, reasonForTransfer: String): Option[Project] = {
+    if (reasonForTransfer == null) {
+      None
+    } else if (reasonForTransfer.contains("29213")) {
+      Some(Projects.WindparkDenTol)
+    } else if (reasonForTransfer.contains("45903")) {
+      Some(Projects.DeGroeneAggregaat)
+    } else if (senderOrReceiver.contains("Groene Aggregaat")) {
+      Some(Projects.DeGroeneAggregaat)
+    } else {
+      None
+    }
+    // TODO:
+    // Grienr
+    // Trading Energy Solutions in Sust BV
   }
 }
