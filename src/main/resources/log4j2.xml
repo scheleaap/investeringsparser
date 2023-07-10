@@ -23,5 +23,10 @@
         <Logger name="org.apache.hadoop.util.NativeCodeLoader" level="error" additivity="false">
             <AppenderRef ref="console"/>
         </Logger>
+
+        <!-- CSV header does not conform to the schema. -->
+        <Logger name="org.apache.spark.sql.catalyst.csv.CSVHeaderChecker" level="error" additivity="false">
+            <AppenderRef ref="console"/>
+        </Logger>
     </Loggers>
 </Configuration>

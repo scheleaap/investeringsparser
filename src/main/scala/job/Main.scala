@@ -2,7 +2,8 @@ package job
 
 import com.github.dwickern.macros.NameOf.nameOf
 import com.monovore.decline.Opts
-import job.MoneyUtil.{parseCurrencyValue, MoneyType}
+import job.MoneyUtil.{MoneyType, parseCurrencyValue}
+import job.SparkTypes.PercentageType
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Dataset, SparkSession}
 import util.{CommandApp2, Spark}
@@ -24,7 +25,18 @@ object Main
     val df = readInputFile(spark)(csvPath)
       .transform(addAndFilterByProject(spark))
       .groupBy($"project.name")
-      .agg(sum("bankStatementItem.amountValue"))
+      .agg(
+        sum(when($"bankStatementItem.amountValue" < 0, $"bankStatementItem.amountValue").otherwise(0)).cast(MoneyType).alias("investment"),
+        sum(when($"bankStatementItem.amountValue" >= 0, $"bankStatementItem.amountValue").otherwise(0)).cast(MoneyType).alias("repayment"),
+        sum("bankStatementItem.amountValue").cast(MoneyType).alias("balance")
+      )
+      .withColumns(
+        Map(
+          ("check", $"balance" === $"investment" + $"repayment"),
+          ("result %", ((($"repayment" / -$"investment") - 1) * 100).cast(PercentageType))
+        )
+      )
+
     df.show()
   }
 
@@ -50,7 +62,7 @@ object Main
       .as[BankStatementItem]
   }
 
-  private def addAndFilterByProject(spark: SparkSession)(input: Dataset[BankStatementItem]): Dataset[(BankStatementItemWithProject)] = {
+  private def addAndFilterByProject(spark: SparkSession)(input: Dataset[BankStatementItem]): Dataset[BankStatementItemWithProject] = {
     import spark.implicits._
 
     input.flatMap(i =>
@@ -60,19 +72,27 @@ object Main
   }
 
   private def reasonForTransferToProject(senderOrReceiver: String, reasonForTransfer: String): Option[Project] = {
-    if (reasonForTransfer == null) {
-      None
-    } else if (reasonForTransfer.contains("29213")) {
-      Some(Projects.WindparkDenTol)
-    } else if (reasonForTransfer.contains("45903")) {
-      Some(Projects.DeGroeneAggregaat)
-    } else if (senderOrReceiver.contains("Groene Aggregaat")) {
-      Some(Projects.DeGroeneAggregaat)
-    } else {
-      None
+    val text1 = if (senderOrReceiver == null) "" else senderOrReceiver.replace(" ", "").toLowerCase
+    val text2 = if (reasonForTransfer == null) "" else reasonForTransfer.replace(" ", "").toLowerCase
+
+    val modifiedMapping = Projects.StringMapping.map { case (s, p) =>
+      s.replace(" ", "").toLowerCase -> p
     }
-    // TODO:
-    // Grienr
-    // Trading Energy Solutions in Sust BV
+
+    val matchedItems: Seq[(String, Project)] = modifiedMapping.flatMap({ case (s, p) =>
+      if (text1.contains(s) || text2.contains(s)) {
+        Seq((s, p))
+      } else {
+        Seq.empty
+      }
+    })
+    val matchedProjects = matchedItems.groupBy(_._2)
+
+    matchedProjects.size match {
+      case 0 => None
+      case 1 => Some(matchedProjects.head._1)
+      case _ =>
+        throw new RuntimeException(s"Strings '$text1' and $text2' matched multiple projects: $matchedProjects")
+    }
   }
 }
