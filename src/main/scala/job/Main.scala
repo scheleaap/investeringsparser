@@ -1,12 +1,14 @@
 package job
 
 import com.github.dwickern.macros.NameOf.nameOf
+import com.github.mrpowers.spark.daria.sql.DariaWriters
 import com.monovore.decline.Opts
 import job.MoneyUtil.{MoneyType, parseCurrencyValue}
-import job.SparkTypes.PercentageType
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Dataset, SparkSession}
 import util.{CommandApp2, Spark}
+
+import java.time.LocalDateTime
 
 object Main
     extends CommandApp2(
@@ -20,24 +22,45 @@ object Main
       .map(main(Spark.getOrCreate))
   }
 
+//  def main(spark: SparkSession)(csvPath: String): Unit = {
+//    import spark.implicits._
+//    val df = readInputFile(spark)(csvPath)
+//      .transform(addAndFilterByProject(spark))
+//      .groupBy($"project.name")
+//      .agg(
+//        sum(when($"bankStatementItem.amountValue" < 0, $"bankStatementItem.amountValue").otherwise(0)).cast(MoneyType).alias("investment"),
+//        sum(when($"bankStatementItem.amountValue" >= 0, $"bankStatementItem.amountValue").otherwise(0)).cast(MoneyType).alias("repayment"),
+//        sum("bankStatementItem.amountValue").cast(MoneyType).alias("balance")
+//      )
+//      .withColumns(
+//        Map(
+//          ("check", $"balance" === $"investment" + $"repayment"),
+//          ("result %", ((($"repayment" / -$"investment") - 1) * 100).cast(PercentageType))
+//        )
+//      )
+//
+//    df.show()
+//  }
+
   def main(spark: SparkSession)(csvPath: String): Unit = {
     import spark.implicits._
     val df = readInputFile(spark)(csvPath)
       .transform(addAndFilterByProject(spark))
-      .groupBy($"project.name")
-      .agg(
-        sum(when($"bankStatementItem.amountValue" < 0, $"bankStatementItem.amountValue").otherwise(0)).cast(MoneyType).alias("investment"),
-        sum(when($"bankStatementItem.amountValue" >= 0, $"bankStatementItem.amountValue").otherwise(0)).cast(MoneyType).alias("repayment"),
-        sum("bankStatementItem.amountValue").cast(MoneyType).alias("balance")
-      )
-      .withColumns(
-        Map(
-          ("check", $"balance" === $"investment" + $"repayment"),
-          ("result %", ((($"repayment" / -$"investment") - 1) * 100).cast(PercentageType))
-        )
+      .select(
+        $"bankStatementItem.bookingDate",
+        $"bankStatementItem.amountValue".cast(MoneyType),
+        $"bankStatementItem.reasonForTransfer",
+        $"project.name"
       )
 
-    df.show()
+    val tmpFolder: String = s"/tmp/investeringsparser.${LocalDateTime.now()}"
+    DariaWriters.writeSingleFile(
+      df = df,
+      format = "csv",
+      sc = spark.sparkContext,
+      tmpFolder = tmpFolder,
+      filename = "out.csv"
+    )
   }
 
   private def readInputFile(spark: SparkSession)(path: String): Dataset[BankStatementItem] = {

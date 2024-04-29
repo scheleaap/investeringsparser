@@ -13,3 +13,5 @@ target/
 tools/
 tmp/
 data/
+.*.crc
+out.csv

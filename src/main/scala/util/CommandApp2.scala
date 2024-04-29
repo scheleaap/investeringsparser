@@ -1,6 +1,6 @@
 package util
 
-import com.monovore.decline.{Command, CommandApp, Opts, PlatformApp, Visibility}
+import com.monovore.decline.{Command, Opts, PlatformApp, Visibility}
 
 abstract class CommandApp2(
   name: String,

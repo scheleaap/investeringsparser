@@ -22,6 +22,7 @@ lazy val root = project
     Test / parallelExecution := false,
     libraryDependencies ++= Seq(
       "io.scalaland" %% "chimney" % "0.6.2",
+      "com.github.mrpowers" %% "spark-daria" % "0.39.0",
       "com.monovore" %% "decline" % "2.3.1",
       "org.typelevel" %% "cats-core" % "2.8.0",
       "org.apache.spark" %% "spark-streaming" % sparkVersion,
@@ -30,6 +31,5 @@ lazy val root = project
       "com.github.dwickern" %% "scala-nameof" % "4.0.0",
       "org.scalatest" %% "scalatest" % "3.2.12" % Test,
       "com.github.mrpowers" %% "spark-daria" % "1.2.3" % Test
-    ),
+    )
   )
-
