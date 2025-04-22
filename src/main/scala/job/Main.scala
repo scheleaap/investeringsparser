@@ -1,14 +1,19 @@
 package job
 
+import cats.implicits.catsSyntaxTuple2Semigroupal
 import com.github.dwickern.macros.NameOf.nameOf
 import com.github.mrpowers.spark.daria.sql.DariaWriters
 import com.monovore.decline.Opts
-import job.MoneyUtil.{MoneyType, parseCurrencyValue}
+import job.MoneyUtil.{parseCurrencyValue, MoneyType}
+import job.Schema.{BankStatementItem, BankStatementItemWithProject, CSV}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Dataset, SparkSession}
 import util.{CommandApp2, Spark}
 
+import java.nio.charset.{Charset, StandardCharsets}
+import java.nio.file.{Files, Path}
 import java.time.LocalDateTime
+import scala.jdk.CollectionConverters._
 
 object Main
     extends CommandApp2(
@@ -17,9 +22,12 @@ object Main
     ) {
 
   override def main: Opts[Unit] = {
-    Opts
-      .option[String]("csvPath", help = "The path to the CSV file or to the directory containing CSV files")
-      .map(main(Spark.getOrCreate))
+    (
+      Opts
+        .option[Path]("inputFile", help = "The path to the input CSV file"),
+      Opts.option[Path]("outputFile", help = "The path to the output CSV file").orNone
+    )
+      .mapN(main(Spark.getOrCreate))
   }
 
 //  def main(spark: SparkSession)(csvPath: String): Unit = {
@@ -42,9 +50,13 @@ object Main
 //    df.show()
 //  }
 
-  def main(spark: SparkSession)(csvPath: String): Unit = {
+  def main(spark: SparkSession)(inputFile: Path, outputFileOpt: Option[Path]): Unit = {
     import spark.implicits._
-    val df = readInputFile(spark)(csvPath)
+    val df = readInputFile(spark)(
+      inputFile = inputFile,
+      charset = StandardCharsets.ISO_8859_1,
+      linesToSkip = 13
+    )
       .transform(addAndFilterByProject(spark))
       .select(
         $"bankStatementItem.bookingDate",
@@ -53,34 +65,53 @@ object Main
         $"project.name"
       )
 
+    val outputFile = outputFileOpt.getOrElse(Path.of("out.csv"))
     val tmpFolder: String = s"/tmp/investeringsparser.${LocalDateTime.now()}"
     DariaWriters.writeSingleFile(
       df = df,
       format = "csv",
       sc = spark.sparkContext,
       tmpFolder = tmpFolder,
-      filename = "out.csv"
+      filename = outputFile.toString
     )
   }
 
-  private def readInputFile(spark: SparkSession)(path: String): Dataset[BankStatementItem] = {
+  private def readInputFile(spark: SparkSession)(inputFile: Path, charset: Charset, linesToSkip: Int): Dataset[BankStatementItem] = {
     import spark.implicits._
+
+    // The disadvantage of this is that the application does not support patterns like "*.csv" anymore.
+    val contentWithoutPrefix = Files
+      .readString(inputFile, charset)
+      .lines()
+      .skip(linesToSkip)
+      .toList
+      .asScala
+
     spark.read
       .format("csv")
-      .option("delimiter", ";")
-      .option("header", true)
-      .option("comment", "#")
-      .csv(path)
+      .options(
+        Map(
+          "delimiter" -> ";",
+          "quote" -> "\"",
+          "escape" -> "\"",
+          "header" -> "true",
+          "inferSchema" -> "false",
+          "mode" -> "FAILFAST",
+          "unescapedQuoteHandling" -> "RAISE_ERROR",
+          "lineSep" -> "\n"
+        )
+      )
+      .csv(contentWithoutPrefix.toDS)
       .select(
-        to_date($"Buchung", "dd.MM.yyyy").as("bookingDate"),
-        to_date($"Valuta", "dd.MM.yyyy").as("valueDate"),
-        col("Auftraggeber/Empf�nger").as("senderOrReceiver"), // ... or beneficiary
-        $"Buchungstext".as("postingText"),
-        lower($"Verwendungszweck").as("reasonForTransfer"),
-        parseCurrencyValue($"Saldo").cast(MoneyType).as("balanceValue"),
-        $"W�hrung6".as("balanceCurrency"),
-        parseCurrencyValue($"Betrag").cast(MoneyType).as("amountValue"),
-        $"W�hrung8".as("amountCurrency")
+        to_date(col(CSV.ColumnNames.bookingDate), "dd.MM.yyyy").as(nameOf[BankStatementItem](_.bookingDate)),
+        to_date(col(CSV.ColumnNames.valueDate), "dd.MM.yyyy").as(nameOf[BankStatementItem](_.valueDate)),
+        col(CSV.ColumnNames.senderOrReceiver).as(nameOf[BankStatementItem](_.senderOrReceiver)), // ... or beneficiary
+        col(CSV.ColumnNames.postingText).as(nameOf[BankStatementItem](_.postingText)),
+        lower(col(CSV.ColumnNames.reasonForTransfer)).as(nameOf[BankStatementItem](_.reasonForTransfer)),
+        parseCurrencyValue(col(CSV.ColumnNames.balanceValue)).cast(MoneyType).as(nameOf[BankStatementItem](_.balanceValue)),
+        col(CSV.ColumnNames.balanceCurrency).as(nameOf[BankStatementItem](_.balanceCurrency)),
+        parseCurrencyValue(col(CSV.ColumnNames.amountValue)).cast(MoneyType).as(nameOf[BankStatementItem](_.amountValue)),
+        col(CSV.ColumnNames.amountCurrency).as(nameOf[BankStatementItem](_.amountCurrency))
       )
       .as[BankStatementItem]
   }
