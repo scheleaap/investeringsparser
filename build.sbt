@@ -1,4 +1,4 @@
-import ScalacOptions._
+import ScalacOptions.*
 
 Global / cancelable := true
 
