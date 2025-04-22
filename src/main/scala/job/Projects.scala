@@ -13,7 +13,7 @@ object Projects {
   val Volgroen2: Project = Project("2022 Volgroen MKB Energie Financiering (Ronde 2)")
   val MisterGreen13: Project = Project("2023 MisterGreen (Serie 13)")
 
-  val StringMapping = Seq(
+  val StringMapping: Seq[(String, Project)] = Seq(
     ("45903", DeGroeneAggregaat),
     ("Groene Aggregaat", DeGroeneAggregaat),
     ("30344", Grienr),
@@ -23,11 +23,14 @@ object Projects {
     ("39042", Volgroen1),
     ("Volgroen MKB Energie Financiering", Volgroen1),
     ("29213", WindparkDenTol),
+    ("Windpark Den Tol", WindparkDenTol),
     ("30119", WocozonTesis),
     ("Wocozon TESIS", WocozonTesis),
     ("54796", Opcharge2),
     ("OPCHARGE SPV2", Opcharge2),
     ("53926", Volgroen2),
-    ("Volgroen Stroom 2", Volgroen2)
+    ("Volgroen Stroom 2", Volgroen2),
+    ("66864", MisterGreen13),
+    ("13 Mist erGreen", MisterGreen13)
   )
 }
