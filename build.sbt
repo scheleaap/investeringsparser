@@ -19,6 +19,10 @@ lazy val root = project
   .settings(
     name := "investeringsparser",
     scalacOptions ++= scalac212Options,
+    fork := true,
+    javaOptions ++= Seq(
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+    ),
     Test / parallelExecution := false,
     libraryDependencies ++= Seq(
       "io.scalaland" %% "chimney" % "0.6.2",
